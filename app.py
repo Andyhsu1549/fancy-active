@@ -48,7 +48,7 @@ st.markdown("<div class='sub-title'>讓資料、流程與決策更簡單 · 更�
 
 # ------------------ 側邊導航 ------------------
 with st.sidebar:
-    st.image("https://static.streamlit.io/examples/dice.jpg", caption="快速將想法變成 App", use_container_width=True)
+    st.image("https://eu-images.contentstack.com/v3/assets/blt6b0f74e5591baa03/blt7c0bf7e21d4410b4/6319700b8cc2fa14e223aa27/8895.png", caption="快速將想法變成 App", use_container_width=True)
     st.markdown("### 導航")
     page = st.radio(
         "選擇頁面",
