@@ -6,45 +6,41 @@ from datetime import datetime, date
 
 # ------------------ 基本設定 ------------------
 st.set_page_config(
-page_title="🌟 Streamlit 商業應用展示工具 🌟",
-page_icon="📈",
-layout="wide",
-initial_sidebar_state="expanded",
+    page_title="🌟 Streamlit 商業應用展示工具 🌟",
+    page_icon="📈",
+    layout="wide",
+    initial_sidebar_state="expanded",
 )
 
-
 # 更新為更亮的顏色主題
-PRIMARY = "#6366F1" # Indigo-500 (比 600 更亮)
-ACCENT = "#22D3EE" # Cyan-400 (更亮)
+PRIMARY = "#6366F1"  # Indigo-500 (比 600 更亮)
+ACCENT = "#22D3EE"   # Cyan-400 (更亮)
 LIGHT = "#F0F9FF"
 DARK = "#0F172A"
 
-
 CUSTOM_CSS = f"""
 <style>
-.big-title {{
-font-size: 2.4rem; font-weight: 900; margin-bottom: .4rem; color: {PRIMARY}; text-align:center;
-}}
-.sub-title {{
-font-size: 1.1rem; color: {ACCENT}; margin-bottom: 1.5rem; text-align:center;
-}}
-.pill {{
-display:inline-block; padding:.15rem .6rem; border-radius:9999px; background:{PRIMARY}; color:white; font-size:.8rem; margin-right:.4rem;
-}}
-.card {{
-background: white; border:1px solid #e5e7eb; border-radius: 16px; padding: 16px; box-shadow: 0 4px 16px rgba(2,6,23,.05);
-}}
-.mute {{ color:#64748B; }}
-.kpi {{ font-size: 1.6rem; font-weight: 700; color: {PRIMARY}; }}
-.footer {{ color:#94A3B8; font-size:.9rem; margin-top:.5rem; text-align:center; }}
-.btn-primary button {{ background:{PRIMARY} !important; border-color:{PRIMARY} !important; }}
-.btn-accent button {{ background:{ACCENT} !important; border-color:{ACCENT} !important; }}
+    .big-title {{
+        font-size: 2.4rem; font-weight: 900; margin-bottom: .4rem; color: {PRIMARY}; text-align:center;
+    }}
+    .sub-title {{
+        font-size: 1.1rem; color: {ACCENT}; margin-bottom: 1.5rem; text-align:center;
+    }}
+    .pill {{
+        display:inline-block; padding:.15rem .6rem; border-radius:9999px; background:{PRIMARY}; color:white; font-size:.8rem; margin-right:.4rem;
+    }}
+    .card {{
+        background: white; border:1px solid #e5e7eb; border-radius: 16px; padding: 16px; box-shadow: 0 4px 16px rgba(2,6,23,.05);
+    }}
+    .mute {{ color:#64748B; }}
+    .kpi {{ font-size: 1.6rem; font-weight: 700; color: {PRIMARY}; }}
+    .footer {{ color:#94A3B8; font-size:.9rem; margin-top:.5rem; text-align:center; }}
+    .btn-primary button {{ background:{PRIMARY} !important; border-color:{PRIMARY} !important; }}
+    .btn-accent button {{ background:{ACCENT} !important; border-color:{ACCENT} !important; }}
 </style>
 """
 
-
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
-
 
 # ------------------ 頁面標題 ------------------
 st.markdown("<div class='big-title'>🌟 Streamlit 商業應用展示工具 🌟</div>", unsafe_allow_html=True)
@@ -64,7 +60,6 @@ with st.sidebar:
             "元件展覽",
             "資料 App 範本",
             "FAQ / 交付與維運",
-            "聯絡 / Call-To-Action",
         ],
         index=0,
     )
@@ -301,7 +296,8 @@ elif page == "元件展覽":
             st.date_input("日期", value=date.today())
             st.text_area("備註")
             ok = st.form_submit_button("送出")
-            if ok: st.success("已提交（示例）")
+            if ok:
+                st.success("已提交（示例）")
     with tab3:
         st.markdown("#### 表格與簡易圖表")
         df = load_demo_data(40)
@@ -376,14 +372,6 @@ elif page == "FAQ / 交付與維運":
     with st.expander("Q5. 交付內容"):
         st.write("原始碼、README、需求/測試文件、部署腳本、使用手冊與教育訓練。")
 
-elif page == "聯絡 / Call-To-Action":
-    st.subheader("一起把想法變成商業價值 🚀")
-    with st.form("cta_form"):
-        name = st.text_input("您的稱呼")
-        email = st.text_input("Email")
-        needs = st.text_area("想解決的問題 / 應用場景")
-        ok = st.form_submit_button("送出需求")
-        if ok:
-            st.success("已收到！我們會盡快回覆您（此為示例，不會真的發信）。")
-
+# 頁尾
 st.markdown("<div class='footer'>© {} Streamlit 商業應用展示工具 · 以範例呈現企業導入可能性</div>".format(datetime.now().year), unsafe_allow_html=True)
+
