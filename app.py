@@ -1,380 +1,389 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from io import BytesIO
-from datetime import datetime
-import json
+import time
+from datetime import datetime, date
 
-# -----------------------------
-# Optional: Google Sheets (safe to run offline)
-# -----------------------------
-try:
-    import gspread
-    from google.oauth2.service_account import Credentials
-    GSPREAD_AVAILABLE = True
-except Exception:
-    gspread = None
-    Credentials = None
-    GSPREAD_AVAILABLE = False
+# ------------------ 基本設定 ------------------
+st.set_page_config(
+page_title="🌟 Streamlit 商業應用展示工具 🌟",
+page_icon="📈",
+layout="wide",
+initial_sidebar_state="expanded",
+)
 
-st.set_page_config(page_title="錐光金屬 - 報價系統 MVP", page_icon="🧮", layout="wide")
-st.title("🧮 錐光金屬 - 報價系統 MVP")
-st.caption("以 Streamlit 製作的最小可行原型：單件/批次估價、(可選) Google Sheets 參數同步、內部管理與 Excel 匯出。未連線時也能正常運作。")
 
-# -----------------------------
-# Sidebar: Global Params
-# -----------------------------
-st.sidebar.header("全域參數 (可依工廠實際調整)")
+# 更新為更亮的顏色主題
+PRIMARY = "#6366F1" # Indigo-500 (比 600 更亮)
+ACCENT = "#22D3EE" # Cyan-400 (更亮)
+LIGHT = "#F0F9FF"
+DARK = "#0F172A"
+
+
+CUSTOM_CSS = f"""
+<style>
+.big-title {{
+font-size: 2.4rem; font-weight: 900; margin-bottom: .4rem; color: {PRIMARY}; text-align:center;
+}}
+.sub-title {{
+font-size: 1.1rem; color: {ACCENT}; margin-bottom: 1.5rem; text-align:center;
+}}
+.pill {{
+display:inline-block; padding:.15rem .6rem; border-radius:9999px; background:{PRIMARY}; color:white; font-size:.8rem; margin-right:.4rem;
+}}
+.card {{
+background: white; border:1px solid #e5e7eb; border-radius: 16px; padding: 16px; box-shadow: 0 4px 16px rgba(2,6,23,.05);
+}}
+.mute {{ color:#64748B; }}
+.kpi {{ font-size: 1.6rem; font-weight: 700; color: {PRIMARY}; }}
+.footer {{ color:#94A3B8; font-size:.9rem; margin-top:.5rem; text-align:center; }}
+.btn-primary button {{ background:{PRIMARY} !important; border-color:{PRIMARY} !important; }}
+.btn-accent button {{ background:{ACCENT} !important; border-color:{ACCENT} !important; }}
+</style>
+"""
+
+
+st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+
+
+# ------------------ 頁面標題 ------------------
+st.markdown("<div class='big-title'>🌟 Streamlit 商業應用展示工具 🌟</div>", unsafe_allow_html=True)
+st.markdown("<div class='sub-title'>讓資料、流程與決策更簡單 · 更快速 · 更美觀</div>", unsafe_allow_html=True)
+
+# ------------------ 側邊導航 ------------------
 with st.sidebar:
-    st.subheader("Google Sheets 連動（可選）")
-    st.caption("上傳 Service Account JSON，並貼上 Google Sheet 連結。需將該 Sheet 分享給此 Service Account email。未設定時將使用內建參數。")
+    st.image("https://static.streamlit.io/examples/dice.jpg", caption="快速將想法變成 App", use_container_width=True)
+    st.markdown("### 導航")
+    page = st.radio(
+        "選擇頁面",
+        [
+            "總覽",
+            "商業情境",
+            "即時展示",
+            "ROI 試算",
+            "元件展覽",
+            "資料 App 範本",
+            "FAQ / 交付與維運",
+            "聯絡 / Call-To-Action",
+        ],
+        index=0,
+    )
 
-    gs_json_file = st.file_uploader("Service Account JSON", type=["json"], key="gsjson")
-    gs_url = st.text_input("Google Sheet 連結 (含 /edit)", value="", key="gs_url")
+    st.divider()
+    st.markdown("#### 快速操作")
+    if st.button("重新載入資料樣本", use_container_width=True):
+        st.cache_data.clear()
+        st.success("已清除快取，資料將於下一次載入！")
 
-    use_gs = False
-    gs_book = None
+    st.markdown("#### 選項")
+    dark = st.toggle("深色風格（僅部分）")
 
-    if GSPREAD_AVAILABLE and gs_json_file and gs_url:
-        try:
-            creds_info = json.load(gs_json_file)
-            creds = Credentials.from_service_account_info(
-                creds_info,
-                scopes=[
-                    "https://www.googleapis.com/auth/spreadsheets",
-                    "https://www.googleapis.com/auth/drive.readonly",
-                ],
-            )
-            gs_client = gspread.authorize(creds)
-            gs_book = gs_client.open_by_url(gs_url)
-            use_gs = True
-            st.success("已連線 Google Sheets！")
-        except Exception as e:
-            use_gs = False
-            gs_book = None
-            st.warning(f"Google Sheets 連線失敗，將改用本機參數：{e}")
-    elif not GSPREAD_AVAILABLE:
-        st.info("偵測不到 gspread / google-auth 套件，將以離線模式運行。")
+# ------------------ 實用輔助 ------------------
+@st.cache_data(show_spinner=False)
+def load_demo_data(rows: int = 200):
+    np.random.seed(42)
+    df = pd.DataFrame({
+        "日期": pd.date_range(date.today().replace(day=1), periods=rows, freq="D"),
+        "通路": np.random.choice(["官網", "門市", "經銷", "B2B"], size=rows),
+        "品類": np.random.choice(["A 系列", "B 系列", "C 系列"], size=rows),
+        "成本": np.random.randint(50, 200, size=rows),
+        "售價": np.random.randint(120, 380, size=rows),
+        "數量": np.random.randint(1, 12, size=rows),
+    })
+    df["營收"] = df["售價"] * df["數量"]
+    df["毛利"] = df["營收"] - (df["成本"] * df["數量"])
+    return df
 
-    # 供 key 後綴使用，確保不重複
-    ctx = "gs" if use_gs else "offline"
 
-    st.subheader("材料與密度/單價")
-    default_materials = {
-        "SPCC 冷軋鋼": {"density": 7.85, "price_per_kg": 35},
-        "SS304 不鏽鋼": {"density": 8.0, "price_per_kg": 90},
-        "AL5052 鋁合金": {"density": 2.7, "price_per_kg": 75},
-    }
+def kpi_card(label: str, value: str, help_text: str = ""):
+    with st.container(border=True):
+        st.markdown(f"<div class='mute'>{label}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='kpi'>{value}</div>", unsafe_allow_html=True)
+        if help_text:
+            st.caption(help_text)
 
-    # Materials
-    if use_gs:
-        try:
-            ws_m = gs_book.worksheet("Materials")
-            rows = ws_m.get_all_records()
-            from collections import OrderedDict
-            mat = OrderedDict()
-            for r in rows:
-                name = str(r.get("material") or "").strip()
-                if not name:
-                    continue
-                dens = float(r.get("density") or 0)
-                price = float(r.get("price_per_kg") or 0)
-                mat[name] = {"density": dens, "price_per_kg": price}
-        except Exception as e:
-            st.warning(f"讀取 Materials 失敗，改用預設：{e}")
-            mat = default_materials.copy()
-    else:
-        mat = default_materials.copy()
 
-    # 可在 UI 臨時覆寫材料參數（每個材料有獨立 key）
-    for i, m in enumerate(list(mat.keys())):
-        with st.expander(f"{m}", expanded=False):
-            mat[m]["density"] = st.number_input(
-                f"{m} 密度 (g/cm³)", value=float(mat[m]["density"]), step=0.01, key=f"dens_{i}")
-            mat[m]["price_per_kg"] = st.number_input(
-                f"{m} 材料單價 (NT$/kg)", value=float(mat[m]["price_per_kg"]), step=1.0, key=f"price_{i}")
+# ------------------ 各頁面 ------------------
+if page == "總覽":
 
-    # Rates
-    st.subheader("製程費率")
-    if use_gs:
-        try:
-            ws_r = gs_book.worksheet("Rates")
-            r = {k: v for k, v in ws_r.get_all_records(head=1)[0].items()}
-            laser_rate = st.number_input("雷射/等離子切割單價 (NT$/m)", value=float(r.get("laser_per_m", 25.0)), step=1.0, key=f"laser_rate_{ctx}")
-            bend_rate = st.number_input("折彎單價 (NT$/道)", value=float(r.get("bend_per_pass", 12.0)), step=1.0, key=f"bend_rate_{ctx}")
-            weld_rate = st.number_input("焊接單價 (NT$/m)", value=float(r.get("weld_per_m", 120.0)), step=1.0, key=f"weld_rate_{ctx}")
-            tap_rate = st.number_input("攻牙單價 (NT$/孔)", value=float(r.get("tap_per_hole", 3.0)), step=0.5, key=f"tap_rate_{ctx}")
-            punch_rate = st.number_input("沖壓單價 (NT$/孔/次)", value=float(r.get("punch_per_hit", 1.5)), step=0.5, key=f"punch_rate_{ctx}")
-            paint_rate = st.number_input("表面處理/噴塗 (NT$/m²)", value=float(r.get("paint_per_m2", 80.0)), step=1.0, key=f"paint_rate_{ctx}")
-        except Exception as e:
-            st.warning(f"讀取 Rates 失敗，改用預設：{e}")
-            laser_rate = st.number_input("雷射/等離子切割單價 (NT$/m)", value=25.0, step=1.0, key=f"laser_rate_{ctx}")
-            bend_rate = st.number_input("折彎單價 (NT$/道)", value=12.0, step=1.0, key=f"bend_rate_{ctx}")
-            weld_rate = st.number_input("焊接單價 (NT$/m)", value=120.0, step=1.0, key=f"weld_rate_{ctx}")
-            tap_rate = st.number_input("攻牙單價 (NT$/孔)", value=3.0, step=0.5, key=f"tap_rate_{ctx}")
-            punch_rate = st.number_input("沖壓單價 (NT$/孔/次)", value=1.5, step=0.5, key=f"punch_rate_{ctx}")
-            paint_rate = st.number_input("表面處理/噴塗 (NT$/m²)", value=80.0, step=1.0, key=f"paint_rate_{ctx}")
-    else:
-        laser_rate = st.number_input("雷射/等離子切割單價 (NT$/m)", value=25.0, step=1.0, key=f"laser_rate_{ctx}")
-        bend_rate = st.number_input("折彎單價 (NT$/道)", value=12.0, step=1.0, key=f"bend_rate_{ctx}")
-        weld_rate = st.number_input("焊接單價 (NT$/m)", value=120.0, step=1.0, key=f"weld_rate_{ctx}")
-        tap_rate = st.number_input("攻牙單價 (NT$/孔)", value=3.0, step=0.5, key=f"tap_rate_{ctx}")
-        punch_rate = st.number_input("沖壓單價 (NT$/孔/次)", value=1.5, step=0.5, key=f"punch_rate_{ctx}")
-        paint_rate = st.number_input("表面處理/噴塗 (NT$/m²)", value=80.0, step=1.0, key=f"paint_rate_{ctx}")
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        kpi_card("開發速度", "x10", "以 Python 直寫，免前端框架。")
+    with c2:
+        kpi_card("上線時間", "數小時", "Prototype 到 PoC 速度快。")
+    with c3:
+        kpi_card("維護成本", "低", "單一語言、少依賴。")
+    with c4:
+        kpi_card("商務價值", "可量化", "決策更快、報表更活。")
 
-    # Settings
-    st.subheader("費率與係數")
-    if use_gs:
-        try:
-            ws_s = gs_book.worksheet("Settings")
-            s = {k: v for k, v in ws_s.get_all_records(head=1)[0].items()}
-            scrap_rate = st.number_input("材料損耗率", value=float(s.get("scrap_rate", 0.05)), step=0.01, min_value=0.0, key=f"scrap_rate_{ctx}")
-            overhead_rate = st.number_input("製造間接費率 (作用於製程費)", value=float(s.get("overhead_rate", 0.15)), step=0.01, min_value=0.0, key=f"overhead_rate_{ctx}")
-            setup_cost = st.number_input("每筆訂單固定開機/換線費 (NT$)", value=float(s.get("setup_cost", 150.0)), step=10.0, min_value=0.0, key=f"setup_cost_{ctx}")
-            profit_margin = st.number_input("利潤率 (作用於總成本)", value=float(s.get("profit_margin", 0.12)), step=0.01, min_value=0.0, key=f"profit_margin_{ctx}")
-        except Exception as e:
-            st.warning(f"讀取 Settings 失敗，改用預設：{e}")
-            scrap_rate = st.number_input("材料損耗率", value=0.05, step=0.01, min_value=0.0, key=f"scrap_rate_{ctx}")
-            overhead_rate = st.number_input("製造間接費率 (作用於製程費)", value=0.15, step=0.01, min_value=0.0, key=f"overhead_rate_{ctx}")
-            setup_cost = st.number_input("每筆訂單固定開機/換線費 (NT$)", value=150.0, step=10.0, min_value=0.0, key=f"setup_cost_{ctx}")
-            profit_margin = st.number_input("利潤率 (作用於總成本)", value=0.12, step=0.01, min_value=0.0, key=f"profit_margin_{ctx}")
-    else:
-        scrap_rate = st.number_input("材料損耗率", value=0.05, step=0.01, min_value=0.0, key=f"scrap_rate_{ctx}")
-        overhead_rate = st.number_input("製造間接費率 (作用於製程費)", value=0.15, step=0.01, min_value=0.0, key=f"overhead_rate_{ctx}")
-        setup_cost = st.number_input("每筆訂單固定開機/換線費 (NT$)", value=150.0, step=10.0, min_value=0.0, key=f"setup_cost_{ctx}")
-        profit_margin = st.number_input("利潤率 (作用於總成本)", value=0.12, step=0.01, min_value=0.0, key=f"profit_margin_{ctx}")
+    st.divider()
 
-# -----------------------------
-# Helper: 核心計算
-# -----------------------------
+    l, r = st.columns([1.2, 1])
+    with l:
+        st.subheader("什麼是 Streamlit？")
+        st.write(
+            """
+            - 開源、雲端友善：以 **Python** 為主，資料團隊即可開發。
+            - 元件齊全：表格、圖表、上傳、下載、表單、狀態管理。
+            - 擴充彈性：可嵌入 LLM、API、資料庫，支援單點登入（企業版）。
+            - 交付快速：從 Jupyter/Spyder 原型，**一鍵轉為互動式 App**。
+            """
+        )
+        with st.expander("我們提供的服務內容"):
+            st.markdown("""
+            1) 需求釐清與資訊架構設計  
+            2) UI/UX 雛形與資料流程設計  
+            3) 開發與串接（資料庫/Excel/API/LLM）  
+            4) 部署（雲端/內網）與權限管理  
+            5) 交付文件、教育訓練與維運支援
+            """)
+    with r:
+        with st.container(border=True):
+            st.markdown("**快速示例：上傳 Excel → KPI 卡片**")
+            up = st.file_uploader("上傳 Excel/CSV", type=["xlsx", "csv"])
+            if up:
+                df = pd.read_excel(up) if up.name.endswith("xlsx") else pd.read_csv(up)
+            else:
+                df = load_demo_data(60)
+            st.dataframe(df.head(10), use_container_width=True)
+            st.caption("*示例資料會自動產生，亦可上傳真實檔案*")
 
-def compute_quote_row(row, mat_dict):
-    # 期望欄位：length_mm, width_mm, thickness_mm, perimeter_m, bends, weld_len_m,
-    #           tap_qty, punch_qty, surface_area_m2, qty, material
-    mat_props = mat_dict.get(row.get('material'), {"density": 7.85, "price_per_kg": 35})
+elif page == "商業情境":
+    st.subheader("常見商業情境與價值")
 
-    area_m2 = (row.get('length_mm', 0) / 1000) * (row.get('width_mm', 0) / 1000)
-    thickness_m = row.get('thickness_mm', 0) / 1000
-    volume_m3 = area_m2 * thickness_m
-    density_kg_m3 = mat_props['density'] * 1000  # g/cm3 -> kg/m3
-    weight_kg = volume_m3 * density_kg_m3
+    col1, col2 = st.columns(2)
+    with col1:
+        with st.container(border=True):
+            st.markdown("### 1) 內部儀表板 / 營運看板")
+            st.write("多資料源彙整、權限控管、即時 KPI")
+            st.markdown("- 例：銷售、庫存、客服、財務指標")
+            if st.button("🔎 範例 KPI", key="biz_kpi", use_container_width=True):
+                df = load_demo_data(120)
+                m1, m2, m3 = st.columns(3)
+                kpi_card("月營收", f"{int(df['營收'].sum()):,}")
+                kpi_card("毛利率", f"{df['毛利'].sum() / df['營收'].sum():.1%}")
+                kpi_card("單筆客單價", f"{int(df['營收'].mean()):,}")
 
-    material_cost = weight_kg * mat_props['price_per_kg'] * (1 + scrap_rate)
-    cutting_cost = row.get('perimeter_m', 0) * laser_rate
-    bending_cost = row.get('bends', 0) * bend_rate
-    welding_cost = row.get('weld_len_m', 0) * weld_rate
-    tap_cost = row.get('tap_qty', 0) * tap_rate
-    punch_cost = row.get('punch_qty', 0) * punch_rate
-    surface_cost = row.get('surface_area_m2', area_m2) * paint_rate
+        with st.container(border=True):
+            st.markdown("### 2) 客製報價 / 專案估算")
+            st.write("將 Excel 報價單流程化、集中化，降低錯誤")
+            with st.form("quote_form", clear_on_submit=False):
+                qty = st.number_input("數量", 1, 1000, 10)
+                unit = st.number_input("單價", 0, 100000, 380)
+                disc = st.slider("折扣(%)", 0, 50, 10)
+                tax = st.toggle("含稅 5%")
+                ok = st.form_submit_button("計算")
+                if ok:
+                    subtotal = qty * unit
+                    total = subtotal * (1 - disc/100) * (1.05 if tax else 1)
+                    st.success(f"報價總計：{total:,.0f}")
 
-    process_cost = cutting_cost + bending_cost + welding_cost + tap_cost + punch_cost + surface_cost
-    overhead_cost = process_cost * overhead_rate
+    with col2:
+        with st.container(border=True):
+            st.markdown("### 3) 流程自動化 / 文件產製")
+            st.write("將 PDF/Word/Excel的重複任務按鈕化，一鍵生成")
+            st.markdown("- 例：對帳、合約套版、型錄生成、稽核紀錄")
+            if st.button("⚙️ 觸發自動化範例", use_container_width=True):
+                with st.spinner("處理中..."):
+                    time.sleep(1.2)
+                st.success("流程完成（示例）！輸出檔案已保存至 /tmp/demo.xlsx")
 
-    unit_cost_before_margin = material_cost + process_cost + overhead_cost
-    unit_price = np.ceil(unit_cost_before_margin * (1 + profit_margin))  # 無條件進位
+        with st.container(border=True):
+            st.markdown("### 4) 客戶入口 / 自助查詢")
+            st.write("對外提供查詢、試算、工單提交，並可串客服機器人")
+            with st.expander("API/SSO/權限示意"):
+                st.code(
+                    """
+                    # 假設以 JWT/SSO 保護端點
+                    def verify_user(token: str) -> bool:
+                        # decode + verify ...
+                        return True
+                    """,
+                    language="python",
+                )
 
-    qty = max(int(row.get('qty', 1)), 1)
-    total_price = unit_price * qty
+elif page == "即時展示":
+    st.subheader("互動式元件與狀態管理示範")
 
-    return {
-        'material_cost': material_cost,
-        'cutting_cost': cutting_cost,
-        'bending_cost': bending_cost,
-        'welding_cost': welding_cost,
-        'tap_cost': tap_cost,
-        'punch_cost': punch_cost,
-        'surface_cost': surface_cost,
-        'overhead_cost': overhead_cost,
-        'unit_cost_before_margin': unit_cost_before_margin,
-        'unit_price': unit_price,
-        'qty': qty,
-        'total_price': total_price,
-        'area_m2': area_m2,
-        'weight_kg': weight_kg,
-    }
+    with st.container(border=True):
+        st.markdown("**篩選條件**")
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            rng = st.slider("日期範圍 (天)", 7, 120, 30)
+        with c2:
+            channel = st.multiselect("通路", ["官網", "門市", "經銷", "B2B"], default=["官網", "門市"]) 
+        with c3:
+            cate = st.selectbox("品類", ["全部", "A 系列", "B 系列", "C 系列"], index=0)
+        with c4:
+            show_margin = st.toggle("顯示毛利")
 
-# -----------------------------
-# 單件報價
-# -----------------------------
-st.header("單件報價")
-col1, col2, col3, col4 = st.columns(4)
-with col1:
-    material = st.selectbox("材料", list(mat.keys()), index=0, key="material_sel")
-    length_mm = st.number_input("展開長 (mm)", value=200.0, step=1.0, key="length_mm")
-    width_mm = st.number_input("展開寬 (mm)", value=150.0, step=1.0, key="width_mm")
-    thickness_mm = st.number_input("厚度 (mm)", value=2.0, step=0.1, key="thickness_mm")
-with col2:
-    perimeter_m = st.number_input("切割周長 (m)", value=1.2, step=0.1, key="perimeter_m")
-    bends = st.number_input("折彎道數 (道)", value=4, step=1, key="bends")
-    weld_len_m = st.number_input("焊接長度 (m)", value=0.3, step=0.1, key="weld_len_m")
-with col3:
-    tap_qty = st.number_input("攻牙孔數 (孔)", value=0, step=1, key="tap_qty")
-    punch_qty = st.number_input("沖壓次數/孔數", value=0, step=1, key="punch_qty")
-    surface_area_m2 = st.number_input("表面處理面積 (m²)", value=0.1, step=0.01, key="surface_area_m2")
-with col4:
-    qty = st.number_input("數量 (pcs)", value=10, step=1, min_value=1, key="qty")
-    part_no = st.text_input("料號/品名", value="Bracket-001", key="part_no")
-    customer = st.text_input("客戶名稱", value="Demo 客戶", key="customer")
+        df = load_demo_data(200)
+        df = df.sort_values("日期").tail(rng)
+        if channel: df = df[df["通路"].isin(channel)]
+        if cate != "全部": df = df[df["品類"] == cate]
 
-single_row = {
-    'material': material,
-    'length_mm': length_mm,
-    'width_mm': width_mm,
-    'thickness_mm': thickness_mm,
-    'perimeter_m': perimeter_m,
-    'bends': bends,
-    'weld_len_m': weld_len_m,
-    'tap_qty': tap_qty,
-    'punch_qty': punch_qty,
-    'surface_area_m2': surface_area_m2,
-    'qty': qty
-}
+        st.dataframe(df, use_container_width=True, hide_index=True)
 
-single_breakdown = compute_quote_row(single_row, mat)
+    st.divider()
 
-# 可選：寫回 Google Sheets 的 Quotes 表
-if use_gs and st.button("寫入此單到 Google Sheets/Quotes", key="write_quote"):
-    try:
-        try:
-            ws_q = gs_book.worksheet("Quotes")
-        except Exception:
-            ws_q = gs_book.add_worksheet(title="Quotes", rows=2000, cols=30)
-            ws_q.append_row(["timestamp","customer","part_no","material","length_mm","width_mm","thickness_mm","perimeter_m","bends","weld_len_m","tap_qty","punch_qty","surface_area_m2","qty","unit_price","total_price"])        
-        ws_q.append_row([
-            datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            customer, part_no, material,
-            length_mm, width_mm, thickness_mm,
-            perimeter_m, bends, weld_len_m, tap_qty, punch_qty, surface_area_m2,
-            qty, int(single_breakdown['unit_price']), int(single_breakdown['total_price'])
-        ])
-        st.success("已寫入 Quotes 工作表！")
-    except Exception as e:
-        st.error(f"寫入失敗：{e}")
+    left, right = st.columns([1.1, 1])
+    with left:
+        st.markdown("**KPI 概覽**")
+        c1, c2, c3 = st.columns(3)
+        kpi_card("營收", f"{int(df['營收'].sum()):,}")
+        if show_margin:
+            kpi_card("毛利率", f"{df['毛利'].sum() / max(df['營收'].sum(),1):.1%}")
+        kpi_card("平均單價", f"{int((df['營收'].sum()/max(df['數量'].sum(),1))):,}")
 
-st.subheader("單件成本拆解")
-colA, colB = st.columns([2, 1])
-with colA:
-    bd_df = pd.DataFrame([
-        {"項目": "材料", "金額": single_breakdown['material_cost']},
-        {"項目": "切割", "金額": single_breakdown['cutting_cost']},
-        {"項目": "折彎", "金額": single_breakdown['bending_cost']},
-        {"項目": "焊接", "金額": single_breakdown['welding_cost']},
-        {"項目": "攻牙", "金額": single_breakdown['tap_cost']},
-        {"項目": "沖壓", "金額": single_breakdown['punch_cost']},
-        {"項目": "表面處理", "金額": single_breakdown['surface_cost']},
-        {"項目": "間接費", "金額": single_breakdown['overhead_cost']},
-    ])
-    st.dataframe(bd_df.style.format({"金額": "{:.0f}"}), use_container_width=True)
-with colB:
-    st.metric("單價 (含利潤)", f"NT$ {int(single_breakdown['unit_price'])}")
-    st.metric("數量", f"{single_breakdown['qty']} 件")
-    st.metric("總價", f"NT$ {int(single_breakdown['total_price'])}")
+    with right:
+        st.markdown("**下載/上傳**")
+        st.download_button("下載目前篩選資料 (CSV)", df.to_csv(index=False).encode("utf-8-sig"), file_name="filtered.csv")
+        st.file_uploader("上傳以覆蓋目前資料 (示例)", type=["csv", "xlsx"])
 
-# -----------------------------
-# 批次報價 (CSV)
-# -----------------------------
-st.header("批次報價 (CSV)")
-st.caption("欄位: part_no, material, length_mm, width_mm, thickness_mm, perimeter_m, bends, weld_len_m, tap_qty, punch_qty, surface_area_m2, qty")
-file = st.file_uploader("上傳 CSV", type=["csv"], key="csv_upload")
+elif page == "ROI 試算":
+    st.subheader("投資報酬率（ROI）與成本效益")
+    st.write("以流程自動化/儀表板為例，估算時間與人力節省")
 
-if file is not None:
-    try:
-        df = pd.read_csv(file)
-    except Exception as e:
-        st.error(f"讀取 CSV 失敗：{e}")
-        df = None
+    with st.form("roi_form"):
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            ppl = st.number_input("參與人數", 1, 200, 5)
+            wage = st.number_input("平均時薪 (NT$)", 150, 3000, 350)
+        with col2:
+            minutes = st.number_input("每次作業耗時 (分鐘)", 1, 600, 60)
+            times = st.number_input("每月作業頻率 (次)", 1, 200, 20)
+        with col3:
+            auto_rate = st.slider("自動化比例 %", 10, 100, 70)
+            proj_cost = st.number_input("專案成本 (NT$)", 10000, 2000000, 300000)
 
-    if df is not None:
-        required = ["part_no","material","length_mm","width_mm","thickness_mm","perimeter_m","bends","weld_len_m","tap_qty","punch_qty","surface_area_m2","qty"]
-        missing = [c for c in required if c not in df.columns]
-        if missing:
-            st.error(f"缺少欄位: {missing}")
+        submit = st.form_submit_button("計算")
+
+    if submit:
+        monthly_hours = ppl * (minutes / 60) * times
+        monthly_saved = monthly_hours * (auto_rate/100)
+        monthly_value = monthly_saved * wage
+        months_to_roi = proj_cost / max(monthly_value, 1)
+
+        c1, c2, c3, c4 = st.columns(4)
+        kpi_card("每月節省(小時)", f"{monthly_saved:.1f}h")
+        kpi_card("每月效益(NT$)", f"{int(monthly_value):,}")
+        kpi_card("回本期(月)", f"{months_to_roi:.1f}")
+        kpi_card("年化效益(NT$)", f"{int(monthly_value*12):,}")
+
+        with st.expander("計算公式與假設"):
+            st.markdown("""
+            - 月工時 = 參與人數 × 每次作業耗時(小時) × 每月頻率  
+            - 節省工時 = 月工時 × 自動化比例  
+            - 月效益 = 節省工時 × 平均時薪  
+            - 回本期 = 專案成本 ÷ 月效益
+            """)
+
+elif page == "元件展覽":
+    st.subheader("常用元件一次看")
+
+    tab1, tab2, tab3, tab4 = st.tabs(["按鈕/選單", "表單與輸入", "表格/圖表", "狀態/提示"])
+    with tab1:
+        st.markdown("#### 按鈕與選單")
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.button("主要動作", key="b1")
+            st.link_button("外部連結", "https://streamlit.io")
+        with c2:
+            st.selectbox("單選下拉", ["A", "B", "C"])
+            st.multiselect("多選", ["紅", "綠", "藍"], default=["紅"]) 
+        with c3:
+            st.slider("數值範圍", 0, 100, 40)
+            st.toggle("開關")
+    with tab2:
+        st.markdown("#### 表單與輸入")
+        with st.form("form_demo"):
+            st.text_input("姓名")
+            st.date_input("日期", value=date.today())
+            st.text_area("備註")
+            ok = st.form_submit_button("送出")
+            if ok: st.success("已提交（示例）")
+    with tab3:
+        st.markdown("#### 表格與簡易圖表")
+        df = load_demo_data(40)
+        st.dataframe(df, use_container_width=True, hide_index=True)
+        st.line_chart(df.groupby("日期")["營收"].sum())
+    with tab4:
+        st.markdown("#### 狀態與提示")
+        with st.status("正在處理任務...", expanded=False) as status:
+            time.sleep(.6)
+            st.write("讀取資料…")
+            time.sleep(.4)
+            st.write("計算指標…")
+            time.sleep(.4)
+            status.update(label="完成！", state="complete")
+
+elif page == "資料 App 範本":
+    st.subheader("範本：從檔案到洞察")
+    st.caption("這是一個可直接複製的資料應用骨架：上傳 → 清理 → 視覺化 → 匯出")
+
+    step = st.segmented_control("流程", ["上傳", "清理", "視覺化", "匯出"], default="上傳")
+    st.divider()
+
+    if "_tpl_df" not in st.session_state:
+        st.session_state["_tpl_df"] = None
+
+    if step == "上傳":
+        up = st.file_uploader("上傳 CSV/Excel", type=["csv", "xlsx"], key="tpl_up")
+        if up:
+            df = pd.read_excel(up) if up.name.endswith("xlsx") else pd.read_csv(up)
+            st.session_state["_tpl_df"] = df
+            st.success(f"讀入 {df.shape[0]} 列 × {df.shape[1]} 欄")
+    elif step == "清理":
+        df = st.session_state.get("_tpl_df")
+        if df is None:
+            st.info("請先於『上傳』步驟匯入資料。")
         else:
-            results = []
-            for _, r in df.iterrows():
-                bd = compute_quote_row(r, mat)
-                results.append({**{k: r.get(k, None) for k in required}, **bd})
-            out_df = pd.DataFrame(results)
-            out_df["unit_price"] = out_df["unit_price"].astype(int)
-            out_df["total_price"] = out_df["total_price"].astype(int)
-            st.success("計算完成！")
-            st.dataframe(out_df, use_container_width=True)
+            st.markdown("**缺失值處理**")
+            method = st.radio("策略", ["刪除含 NA 列", "以 0 填補"], horizontal=True)
+            if st.button("套用"):
+                if method == "刪除含 NA 列":
+                    df = df.dropna()
+                else:
+                    df = df.fillna(0)
+                st.session_state["_tpl_df"] = df
+                st.success("完成清理！")
+            st.dataframe(df.head(20), use_container_width=True)
+    elif step == "視覺化":
+        df = st.session_state.get("_tpl_df")
+        if df is None:
+            st.info("請先於『上傳』步驟匯入資料。")
+        else:
+            col = st.selectbox("選擇數值欄位繪圖", options=[c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])])
+            st.line_chart(df[col])
+    else:  # 匯出
+        df = st.session_state.get("_tpl_df")
+        if df is None:
+            st.info("請先於『上傳』步驟匯入資料。")
+        else:
+            st.download_button("下載清理後資料 (CSV)", df.to_csv(index=False).encode("utf-8-sig"), file_name="cleaned.csv")
 
-            # 產生 Excel 供下載
-            with BytesIO() as buffer:
-                with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-                    meta = pd.DataFrame({
-                        '欄位': ['客戶','建立時間','開機費','利潤率','損耗率','間接費率'],
-                        '值': [customer, datetime.now().strftime('%Y-%m-%d %H:%M'), setup_cost, profit_margin, scrap_rate, overhead_rate]
-                    })
-                    meta.to_excel(writer, sheet_name='Quote_Meta', index=False)
-                    out_df.to_excel(writer, sheet_name='Quote_Items', index=False)
-                dl = buffer.getvalue()
-            st.download_button("下載 Excel 報價檔", data=dl,
-                               file_name=f"quote_{customer}_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
-                               mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                               key="dl_excel")
+elif page == "FAQ / 交付與維運":
+    st.subheader("FAQ / 專案交付與維運")
 
-# -----------------------------
-# 對內：參數管理（寫回 Google Sheets）
-# -----------------------------
-if use_gs and GSPREAD_AVAILABLE and gs_book is not None:
-    st.header("內部管理（對內）")
-    st.caption("直接在這裡維護 Google Sheets：Materials / Rates / Settings。省去打開複雜表單的麻煩。")
+    with st.expander("Q1. 如何部署？"):
+        st.write("Docker/雲端（Streamlit Community Cloud、Cloud Run、EC2、Azure App Services）或內網伺服器皆可。")
+    with st.expander("Q2. 權限與安全"):
+        st.write("可串 SSO / JWT，網段白名單，API 金鑰保護，稽核日誌。")
+    with st.expander("Q3. 與資料庫/Excel 串接？"):
+        st.write("可連接 MySQL/Postgres/BigQuery；也可直接讀寫 Excel、CSV、Google Sheets。")
+    with st.expander("Q4. LLM 與自動化"):
+        st.write("可接 OpenAI/本地模型，建立問答、摘要、文件產製流程。")
+    with st.expander("Q5. 交付內容"):
+        st.write("原始碼、README、需求/測試文件、部署腳本、使用手冊與教育訓練。")
 
-    tab_m, tab_r, tab_s = st.tabs(["Materials", "Rates", "Settings"])
+elif page == "聯絡 / Call-To-Action":
+    st.subheader("一起把想法變成商業價值 🚀")
+    with st.form("cta_form"):
+        name = st.text_input("您的稱呼")
+        email = st.text_input("Email")
+        needs = st.text_area("想解決的問題 / 應用場景")
+        ok = st.form_submit_button("送出需求")
+        if ok:
+            st.success("已收到！我們會盡快回覆您（此為示例，不會真的發信）。")
 
-    with tab_m:
-        try:
-            ws_m = gs_book.worksheet("Materials")
-            m_rows = ws_m.get_all_records()
-            m_df = pd.DataFrame(m_rows or [{"material":"SPCC 冷軋鋼","density":7.85,"price_per_kg":35}])
-            st.write("編輯材料清單（material, density, price_per_kg）：")
-            m_edit = st.data_editor(m_df, num_rows="dynamic", use_container_width=True, key="m_editor")
-            if st.button("儲存 Materials", key="save_mat"):
-                ws_m.clear()
-                ws_m.update([m_edit.columns.tolist()] + m_edit.fillna("").values.tolist())
-                st.success("Materials 已更新！")
-        except Exception as e:
-            st.warning(f"Materials 無法讀寫：{e}")
-
-    with tab_r:
-        try:
-            try:
-                ws_r = gs_book.worksheet("Rates")
-            except Exception:
-                ws_r = gs_book.add_worksheet(title="Rates", rows=50, cols=10)
-                ws_r.update([["laser_per_m","bend_per_pass","weld_per_m","tap_per_hole","punch_per_hit","paint_per_m2"],[25,12,120,3,1.5,80]])
-            r_row = ws_r.get_all_records(head=1)
-            r_df = pd.DataFrame(r_row or [{"laser_per_m":25,"bend_per_pass":12,"weld_per_m":120,"tap_per_hole":3,"punch_per_hit":1.5,"paint_per_m2":80}])
-            r_edit = st.data_editor(r_df, use_container_width=True, key="r_editor")
-            if st.button("儲存 Rates", key="save_rates"):
-                ws_r.clear()
-                ws_r.update([r_edit.columns.tolist()] + r_edit.fillna("").values.tolist())
-                st.success("Rates 已更新！")
-        except Exception as e:
-            st.warning(f"Rates 無法讀寫：{e}")
-
-    with tab_s:
-        try:
-            try:
-                ws_s = gs_book.worksheet("Settings")
-            except Exception:
-                ws_s = gs_book.add_worksheet(title="Settings", rows=50, cols=10)
-                ws_s.update([["scrap_rate","overhead_rate","setup_cost","profit_margin"],[0.05,0.15,150,0.12]])
-            s_row = ws_s.get_all_records(head=1)
-            s_df = pd.DataFrame(s_row or [{"scrap_rate":0.05,"overhead_rate":0.15,"setup_cost":150,"profit_margin":0.12}])
-            s_edit = st.data_editor(s_df, use_container_width=True, key="s_editor")
-            if st.button("儲存 Settings", key="save_settings"):
-                ws_s.clear()
-                ws_s.update([s_edit.columns.tolist()] + s_edit.fillna("").values.tolist())
-                st.success("Settings 已更新！")
-        except Exception as e:
-            st.warning(f"Settings 無法讀寫：{e}")
-else:
-    st.info("若要啟用『內部管理』與 Sheets 回寫，請先在側邊欄連線 Google Sheets（離線模式下亦可完整估價與匯出）。")
-
-# -----------------------------
-# Footer / Notes
-# -----------------------------
-st.info("本原型為示意，實際係數/費率請依工廠實際成本、工時與良率調整。可擴充：PDF 報價單、階梯價、最低毛利警示、角色權限、簽核、歷史版本控管、DXF/DWG 解析、ERP/MES 串接等。")
+st.markdown("<div class='footer'>© {} Streamlit 商業應用展示工具 · 以範例呈現企業導入可能性</div>".format(datetime.now().year), unsafe_allow_html=True)
